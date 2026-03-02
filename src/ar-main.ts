@@ -1,103 +1,199 @@
-import * as THREE from 'three'
-import { ARButton } from 'three/addons/webxr/ARButton.js'
 
-const scene  = new THREE.Scene()
-const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100)
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
-renderer.setPixelRatio(window.devicePixelRatio)
-renderer.setSize(window.innerWidth, window.innerHeight)
-renderer.xr.enabled = true
-document.body.appendChild(renderer.domElement)
+import * as THREE from 'three';
+import { ARButton } from 'three/addons/webxr/ARButton.js';
 
-scene.add(new THREE.AmbientLight(0xffffff, 1.0))
-const dirLight = new THREE.DirectionalLight(0xffffff, 1.0)
-dirLight.position.set(1, 2, 1)
-scene.add(dirLight)
+let container;
+let camera : THREE.PerspectiveCamera, scene : THREE.Scene, renderer : THREE.WebGLRenderer;
+let controller1, controller2;
 
-document.body.appendChild(
-  ARButton.createButton(renderer, {
-    requiredFeatures: ["hit-test"],
-    optionalFeatures: ["dom-overlay"],
-    domOverlay: { root: document.body }
-  })
-)
+let reticle: THREE.Mesh;
 
-const reticle = new THREE.Mesh(
-  new THREE.RingGeometry(0.08, 0.10, 32).rotateX(-Math.PI / 2),
-  new THREE.MeshBasicMaterial({ color: 0x00ffff, side: THREE.DoubleSide })
-)
-reticle.matrixAutoUpdate = false
-reticle.visible = false
-scene.add(reticle)
+let hitTestSource: XRHitTestSource | null  = null;
+let hitTestSourceRequested = false;
 
-const cylinder = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.05, 0.05, 0.15, 32),
-  new THREE.MeshStandardMaterial({ color: 0xff4444, roughness: 0.5 })
-)
-cylinder.visible = false
-scene.add(cylinder)
+init();
 
-let hitTestSource: any = null
-let hitTestRequested   = false
+function init() {
 
-const controller = renderer.xr.getController(0)
-scene.add(controller)
+  container = document.createElement( 'div' );
+  document.body.appendChild( container );
 
-controller.addEventListener("select", () => {
-  if (!reticle.visible) return
-  cylinder.position.setFromMatrixPosition(reticle.matrix)
-  cylinder.position.y += 0.075
-  cylinder.visible = true
-  cylinder.scale.set(0, 0, 0)
-  const start = performance.now()
-  const pop = (now: number) => {
-    const t = Math.min((now - start) / 400, 1)
-    cylinder.scale.setScalar(1 - Math.pow(1 - t, 3))
-    if (t < 1) requestAnimationFrame(pop)
-  }
-  requestAnimationFrame(pop)
-})
+  scene = new THREE.Scene();
 
-window.addEventListener("resize", () => {
-  camera.aspect = window.innerWidth / window.innerHeight
-  camera.updateProjectionMatrix()
-  renderer.setSize(window.innerWidth, window.innerHeight)
-})
+  camera = new THREE.PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 0.01, 20 );
 
-renderer.setAnimationLoop((_t: number, frame: any) => {
-  if (frame) {
-    const refSpace = renderer.xr.getReferenceSpace()
-    const session  = renderer.xr.getSession()
+  const light = new THREE.HemisphereLight( 0xffffff, 0xbbbbff, 3 );
+  light.position.set( 0.5, 1, 0.25 );
+  scene.add( light );
 
-    if (!hitTestRequested && session) {
-      session.requestReferenceSpace("viewer").then((viewerSpace: any) => {
-        session.requestHitTestSource?.({ space: viewerSpace })?.then((src: any) => {
-          hitTestSource = src
-        })
-      })
-      session.addEventListener("end", () => {
-        hitTestRequested = false
-        hitTestSource    = null
-        reticle.visible  = false
-      })
-      hitTestRequested = true
+  //
+
+  renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
+  renderer.setPixelRatio( window.devicePixelRatio );
+  renderer.setSize( window.innerWidth, window.innerHeight );
+  renderer.setAnimationLoop( animate );
+  renderer.xr.enabled = true;
+  container.appendChild( renderer.domElement );
+
+  //
+
+  document.body.appendChild( ARButton.createButton( renderer, { requiredFeatures: [ 'hit-test' ] } ) );
+
+  //
+
+    const INGREDIENTS = [
+    { name: 'Tomate',    color: 0xff2222, shape: 'sphere'   },
+    { name: 'Fromage',   color: 0xffdd00, shape: 'box'      },
+    { name: 'Champignon',color: 0xaa6633, shape: 'cylinder' },
+    { name: 'Herbes',    color: 0x33cc44, shape: 'cone'     },
+    ]
+    function makeIngredient() {
+        const ing = INGREDIENTS[ Math.floor( Math.random() * INGREDIENTS.length ) ]
+        let geo: THREE.BufferGeometry
+
+        if ( ing.shape === 'sphere' )
+            geo = new THREE.SphereGeometry( 0.08, 16, 16 )
+        else if ( ing.shape === 'box' )
+            geo = new THREE.BoxGeometry( 0.12, 0.08, 0.12 )
+        else if ( ing.shape === 'cone' )
+            geo = new THREE.ConeGeometry( 0.07, 0.15, 16 )
+        else
+            geo = new THREE.CylinderGeometry( 0.06, 0.08, 0.12, 16 )
+
+        const mat  = new THREE.MeshPhongMaterial({ color: ing.color, shininess: 80 })
+        const mesh = new THREE.Mesh( geo, mat )
+
+        const canvas  = document.createElement('canvas')
+        canvas.width  = 256
+        canvas.height = 64
+        const ctx = canvas.getContext('2d')!
+        ctx.fillStyle    = 'rgba(0,0,0,0.6)'
+        ctx.roundRect(4, 4, 248, 56, 12)
+        ctx.fill()
+        ctx.fillStyle = '#ffffff'
+        ctx.font      = 'bold 28px Arial'
+        ctx.textAlign = 'center'
+        ctx.fillText( ing.name, 128, 40 )
+
+        const tex    = new THREE.CanvasTexture( canvas )
+        const label  = new THREE.Mesh(
+            new THREE.PlaneGeometry( 0.2, 0.05 ),
+            new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false })
+        )
+        label.position.y = 0.15
+        label.rotation.x = -0.3
+        mesh.add( label )
+
+        return { mesh, name: ing.name }
+        }
+
+        let score = 0
+        const scoreDiv = document.createElement('div')
+        scoreDiv.style.cssText = `
+        position:fixed; top:20px; left:50%; transform:translateX(-50%);
+        color:white; font-size:1.4rem; font-family:Arial; font-weight:bold;
+        background:rgba(0,0,0,0.5); padding:8px 20px; border-radius:20px;
+        pointer-events:none;
+        `
+        scoreDiv.textContent = '🧀 Ingrédients : 0'
+        document.body.appendChild( scoreDiv )
+
+        // Liste des ingrédients posés (pour détection collecte)
+        const placed: { mesh: THREE.Mesh, name: string }[] = []
+
+        function onSelect() {
+        if ( reticle.visible ) {
+            const { mesh, name } = makeIngredient()
+            reticle.matrix.decompose( mesh.position, mesh.quaternion, mesh.scale )
+            mesh.position.y += 0.06
+            scene.add( mesh )
+            placed.push({ mesh, name })
+        }
     }
 
-    if (hitTestSource && refSpace) {
-      const hits = frame.getHitTestResults(hitTestSource)
-      if (hits.length > 0) {
-        const pose = hits[0].getPose(refSpace)
+  controller1 = renderer.xr.getController( 0 );
+  controller1.addEventListener( 'select', onSelect );
+  scene.add( controller1 );
+
+  controller2 = renderer.xr.getController( 1 );
+  controller2.addEventListener( 'select', onSelect );
+  scene.add( controller2 );
+
+  reticle = new THREE.Mesh(
+    new THREE.RingGeometry( 0.15, 0.2, 32 ).rotateX( - Math.PI / 2 ),
+    new THREE.MeshBasicMaterial()
+  );
+  reticle.matrixAutoUpdate = false;
+  reticle.visible = false;
+  scene.add( reticle );
+
+  //
+
+  window.addEventListener( 'resize', onWindowResize );
+
+}
+
+function onWindowResize() {
+
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+
+  renderer.setSize( window.innerWidth, window.innerHeight );
+
+}
+
+//
+
+function animate(timestamp: number, frame?: XRFrame) {
+
+  if (frame) {
+
+    const referenceSpace: XRReferenceSpace = renderer.xr.getReferenceSpace()!;
+    const session: XRSession = renderer.xr.getSession()!;
+
+    if (hitTestSourceRequested === false) {
+
+      session.requestReferenceSpace('viewer').then((referenceSpace: XRReferenceSpace) => {
+
+        session.requestHitTestSource?.({ space: referenceSpace })?.then((source: XRHitTestSource) => {
+
+          hitTestSource = source;
+
+        });
+
+      });
+
+      session.addEventListener('end', () => {
+
+        hitTestSourceRequested = false;
+        hitTestSource = null;
+
+      });
+
+      hitTestSourceRequested = true;
+
+    }
+
+    if (hitTestSource) {
+
+      const hitTestResults = frame.getHitTestResults(hitTestSource);
+
+      if (hitTestResults.length) {
+
+        const hit = hitTestResults[0];
+        const pose = hit.getPose(referenceSpace);
+
         if (pose) {
-          reticle.visible = true
-          reticle.matrix.fromArray(pose.transform.matrix)
+          reticle.visible = true;
+          reticle.matrix.fromArray(pose.transform.matrix);
         }
+
       } else {
-        reticle.visible = false
+        reticle.visible = false;
       }
     }
   }
 
-  if (cylinder.visible) cylinder.rotation.y += 0.01
-  renderer.render(scene, camera)
-})
+  renderer.render(scene, camera);
+}
