@@ -1,4 +1,5 @@
-# three_vite_xr_ts
+# ratatouille-in-paris-xr
+
 THREE.js + WebXR template using [Vite](https://vitejs.dev).
 
 Allows testing and modifying [official THREE.js WebXR examples](https://threejs.org/examples/?q=webxr) locally, at lightning speed.
@@ -32,17 +33,15 @@ Install [Node.js](https://nodejs.org)
 
 HTTPS is required to use the WebXR API
 
-
 ### Using Cloudflare Tunnel for free without an account or a domain (recommended)
 
-  - Install [Homebrew](https://brew.sh)
+- Install [Homebrew](https://brew.sh)
 
 ```bash
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
 then follow instructions
-
 
 ```bash
 echo >> /Users/XXX/.zprofile
@@ -52,11 +51,12 @@ echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> /Users/XXX/.zprofile
 eval "$(/opt/homebrew/bin/brew shellenv)"
 ```
 
-  - **[Install `cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)**
+- **[Install `cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)**
 
 ```bash
 brew install cloudflared
 ```
+
 - run your app locally
 
 ```bash
@@ -81,8 +81,7 @@ Alternatively, you could simply [use GitHub Pages to host your application persi
 
 ### Tunneling alternatives
 
-Check these tunneling alternatives such as `ngrok` or `zrok` for simple personal projects, use [tunneling solutions](https://github.com/anderspitman/awesome-tunneling) 
-
+Check these tunneling alternatives such as `ngrok` or `zrok` for simple personal projects, use [tunneling solutions](https://github.com/anderspitman/awesome-tunneling)
 
 ### Manual HTTPS setup
 
@@ -120,16 +119,13 @@ npm run build
 
 This will create a `dist` folder containing the static files for the app. You can then upload these files to your hosting platform of choice.
 
-
 # Credits
 
-- XR enhanced version of the original ```three_vite``` template : https://github.com/fdoganis/three_vite (MIT License)
-  
+- XR enhanced version of the original `three_vite` template : https://github.com/fdoganis/three_vite (MIT License)
 - THREE.js WebXR code inspired by https://threejs.org/examples/webxr_ar_cones.html (MIT License)
 
 - Test model (red cube) from https://github.com/cx20/gltf-test/tree/master/sampleModels/Box (CC BY License)
 
-- Some very interesting features (emulator, github pages deployment) have been borrowed from https://github.com/meta-quest/webxr-first-steps  (MIT License)
-
+- Some very interesting features (emulator, github pages deployment) have been borrowed from https://github.com/meta-quest/webxr-first-steps (MIT License)
   - Make sure to check this excellent tutorial out! Even if it is mostly focused on VR, it is a great introduction on how to combine WebXR with THREE.js.
   - See [Deployment Instructions](https://github.com/meta-quest/webxr-first-steps?tab=readme-ov-file#build-and-deploy)
