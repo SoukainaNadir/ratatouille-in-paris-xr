@@ -3,8 +3,6 @@
 import * as THREE from 'three';
 import { ARButton } from 'three/addons/webxr/ARButton.js';
 
-import * as THREE from 'three'
-import { ARButton } from 'three/addons/webxr/ARButton.js'
 import { TTFLoader } from 'three/addons/loaders/TTFLoader.js'
 import { Font } from 'three/addons/loaders/FontLoader.js'
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js'
