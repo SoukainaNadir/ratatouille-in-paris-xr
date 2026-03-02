@@ -15,7 +15,7 @@ let hitTestSourceRequested = false;
 init();
 
 function init() {
-
+const placed: THREE.Mesh[] = []
   container = document.createElement( 'div' );
   document.body.appendChild( container );
 
@@ -43,12 +43,13 @@ function init() {
   //
 
     const INGREDIENTS = [
-    { name: 'Tomate',    color: 0xff2222, shape: 'sphere'   },
-    { name: 'Fromage',   color: 0xffdd00, shape: 'box'      },
-    { name: 'Champignon',color: 0xaa6633, shape: 'cylinder' },
-    { name: 'Herbes',    color: 0x33cc44, shape: 'cone'     },
+        { name: 'Tomate',    color: 0xff2222, shape: 'sphere'   },
+        { name: 'Courgette', color: 0x44bb22, shape: 'cylinder' },
+        { name: 'Aubergine', color: 0x6622aa, shape: 'sphere'   },
+        { name: 'Poivron',   color: 0xff7700, shape: 'box'      },
     ]
-    function makeIngredient() {
+
+        function makeIngredient() {
         const ing = INGREDIENTS[ Math.floor( Math.random() * INGREDIENTS.length ) ]
         let geo: THREE.BufferGeometry
 
@@ -63,76 +64,39 @@ function init() {
 
         const mat  = new THREE.MeshPhongMaterial({ color: ing.color, shininess: 80 })
         const mesh = new THREE.Mesh( geo, mat )
-
-        const canvas  = document.createElement('canvas')
-        canvas.width  = 256
-        canvas.height = 64
-        const ctx = canvas.getContext('2d')!
-        ctx.fillStyle    = 'rgba(0,0,0,0.6)'
-        ctx.roundRect(4, 4, 248, 56, 12)
-        ctx.fill()
-        ctx.fillStyle = '#ffffff'
-        ctx.font      = 'bold 28px Arial'
-        ctx.textAlign = 'center'
-        ctx.fillText( ing.name, 128, 40 )
-
-        const tex    = new THREE.CanvasTexture( canvas )
-        const label  = new THREE.Mesh(
-            new THREE.PlaneGeometry( 0.2, 0.05 ),
-            new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false })
-        )
-        label.position.y = 0.15
-        label.rotation.x = -0.3
-        mesh.add( label )
-
         return { mesh, name: ing.name }
         }
 
-        let score = 0
-        const scoreDiv = document.createElement('div')
-        scoreDiv.style.cssText = `
-        position:fixed; top:20px; left:50%; transform:translateX(-50%);
-        color:white; font-size:1.4rem; font-family:Arial; font-weight:bold;
-        background:rgba(0,0,0,0.5); padding:8px 20px; border-radius:20px;
-        pointer-events:none;
-        `
-        scoreDiv.textContent = '🧀 Ingrédients : 0'
-        document.body.appendChild( scoreDiv )
-
-        // Liste des ingrédients posés (pour détection collecte)
-        const placed: { mesh: THREE.Mesh, name: string }[] = []
-
         function onSelect() {
         if ( reticle.visible ) {
-            const { mesh, name } = makeIngredient()
+            const { mesh } = makeIngredient()
             reticle.matrix.decompose( mesh.position, mesh.quaternion, mesh.scale )
             mesh.position.y += 0.06
             scene.add( mesh )
-            placed.push({ mesh, name })
+            placed.push( mesh )
         }
-    }
+        }
+        controller1 = renderer.xr.getController( 0 );
+        controller1.addEventListener( 'select', onSelect );
+        scene.add( controller1 );
 
-  controller1 = renderer.xr.getController( 0 );
-  controller1.addEventListener( 'select', onSelect );
-  scene.add( controller1 );
+        controller2 = renderer.xr.getController( 1 );
+        controller2.addEventListener( 'select', onSelect );
+        scene.add( controller2 );
 
-  controller2 = renderer.xr.getController( 1 );
-  controller2.addEventListener( 'select', onSelect );
-  scene.add( controller2 );
+        reticle = new THREE.Mesh(
+            new THREE.RingGeometry( 0.15, 0.2, 32 ).rotateX( - Math.PI / 2 ),
+            new THREE.MeshBasicMaterial()
+        );
+        reticle.matrixAutoUpdate = false;
+        reticle.visible = false;
+        scene.add( reticle );
 
-  reticle = new THREE.Mesh(
-    new THREE.RingGeometry( 0.15, 0.2, 32 ).rotateX( - Math.PI / 2 ),
-    new THREE.MeshBasicMaterial()
-  );
-  reticle.matrixAutoUpdate = false;
-  reticle.visible = false;
-  scene.add( reticle );
+        //
 
-  //
+        window.addEventListener( 'resize', onWindowResize );
 
-  window.addEventListener( 'resize', onWindowResize );
-
-}
+        }
 
 function onWindowResize() {
 
