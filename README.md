@@ -1,131 +1,90 @@
-# ratatouille-in-paris-xr
+# 🐀 Chef en Fuite AR
 
-THREE.js + WebXR template using [Vite](https://vitejs.dev).
+Une expérience de jeu en réalité augmentée construite avec THREE.js + WebXR.
+Cachez des ingrédients dans le monde réel et défiez un ami de les retrouver,
+avant que les chats de Skinner ne les volent !
 
-Allows testing and modifying [official THREE.js WebXR examples](https://threejs.org/examples/?q=webxr) locally, at lightning speed.
+🔗 [Tester en live](https://soukainanadir.github.io/ratatouille-in-paris-xr)
 
-## Batteries included
+---
 
-Pre-configured to support :
+## Le principe
 
-- WebXR initialization
-- glTF file loading
-- ammo.js wasm physics library
-  - which is fast, but you might consider using the excellent and simpler [Cannon-es](https://fdoganis.github.io/slides/cannon.html) instead
-- VSCode launch scripts
-- THREE.js type definitions : for IntelliSense in VS Code
-- recommended VS Code extensions
-- deployment
+Inspiré de Ratatouille, **Chef en Fuite AR** est un jeu à 2 joueurs en tour par tour :
 
-Have a look at vite.config.js and customize it to your needs (additional libraries, file formats etc.).
+- **Le Cacheur** pointe son téléphone vers le sol, place jusqu'à 5 ingrédients 
+  dans l'espace réel via le hit-test WebXR, puis passe le téléphone.
+- **Le Rat** a 60 secondes pour retrouver et collecter tous les ingrédients 
+  en tapant dessus, tout en évitant un chat AR qui rôde et vole les ingrédients.
 
-## Installation
+Les ingrédients tombent avec gravité physique au moment du placement, rebondissent 
+sur le sol réel, puis flottent et brillent pour indiquer leur présence.
 
-Install [Node.js](https://nodejs.org)
+---
 
-- Clone or download repo
-- run `npm install` : fetches and install all dependencies
-- `npm run dev` : launches a server and opens your browser in `https://localhost:5173` by default
-  - Edit your code : your changes are reflected instantly!
-- `npm run build` : packages all code and resources into the `dist` folder, ready for deployment.
+## Mode d'emploi
 
-## HTTPS
+1. Ouvrir le lien live sur un appareil compatible WebXR (Android + Chrome recommandé,  
+   iOS via WebXR Viewer ou HelloXR)
+2. Choisir son rôle : **Je cache** ou **Je cherche**
+3. Appuyer sur **Start AR** et pointer la caméra vers une surface plate
+4. *(Mode Cacheur)* Quand le réticule apparaît, taper pour poser un ingrédient -  
+   il tombe du ciel et rebondit sur le sol. Répéter jusqu'à 5 ingrédients, puis **Terminé**
+5. Passer le téléphone au Rat
+6. *(Mode Rat)* Retrouver les ingrédients en 60 secondes en tapant dessus - 
+   ils n'apparaissent que quand on s'en approche à moins de 1.5m
+7. Attention au chat qui arrive et vole les ingrédients non collectés !
 
-HTTPS is required to use the WebXR API
+---
 
-### Using Cloudflare Tunnel for free without an account or a domain (recommended)
+## Démo
 
-- Install [Homebrew](https://brew.sh)
+![Demo](demo.gif)
 
+---
+
+## Fonctionnalités
+
+| Fonctionnalité | Détails |
+|---|---|
+| **Hit-test WebXR** | Le réticule se snap sur les surfaces réelles via l'API WebXR hit-test |
+| **Interaction tactile** | Tap pour placer, tap pour collecter |
+| **Physique (Cannon-es)** | Les ingrédients tombent avec gravité et rebondissent sur le sol AR |
+| **Ombres sur sol réel** | `ShadowMaterial` transparent ancré au niveau du hit-test |
+| **Éclairage adaptatif** | `XREstimatedLight` ajuste l'éclairage à la lumière réelle de la pièce |
+| **Regard (gaze)** | Réticule de visée centré sur la caméra |
+| **Audio procédural** | Sons générés avec la Web Audio API (oscillateurs, enveloppes ADSR) - aucun fichier audio chargé |
+| **Chat AR** | Ennemi autonome qui se déplace vers les ingrédients et les vole |
+| **UI DOM overlay** | Interface adaptée mobile, intégrée à la session AR |
+
+---
+
+## Lancer en local
 ```bash
-  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-```
-
-then follow instructions
-
-```bash
-echo >> /Users/XXX/.zprofile
-
-echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> /Users/XXX/.zprofile
-
-eval "$(/opt/homebrew/bin/brew shellenv)"
-```
-
-- **[Install `cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)**
-
-```bash
-brew install cloudflared
-```
-
-- run your app locally
-
-```bash
+git clone https://github.com/SoukainaNadir/ratatouille-in-paris-xr.git
+cd ratatouille-in-paris-xr
+npm install
 npm run dev
 ```
 
-- run `cloudflared` tunnel
-
+HTTPS requis pour WebXR — utiliser Cloudflare Tunnel :
 ```bash
-cloudflared tunnel --url http://localhost:5173/
+npm run cloud
 ```
 
-This will create a random temporary address ending in `*.trycloudflare.com`
+---
 
-You can share this address by sending a link or by generating a QR code (very useful for mobile devices and some XR headsets).
+## Sources & crédits
 
-### Persistent link
+- Template de base — [fdoganis/three_vite_xr_ts](https://github.com/fdoganis/three_vite_xr_ts) (MIT)
+- Référence WebXR hit-test — [threejs.org/examples/webxr_ar_cones](https://threejs.org/examples/webxr_ar_cones.html) (MIT)
+- Éclairage estimé — [threejs.org/examples/webxr_ar_lighting](https://threejs.org/examples/webxr_ar_lighting.html) (MIT)
+- Workflow de déploiement — [meta-quest/webxr-first-steps](https://github.com/meta-quest/webxr-first-steps) (MIT)
+- Physique — [Cannon-es](https://github.com/pmndrs/cannon-es) (MIT)
+- Audio procédural — [Web Audio API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API) (MDN)
 
-If you want more persistence, you should register a domain name, or connect your github account to [Cloudflare Pages](https://pages.cloudflare.com) for free.
+---
 
-Alternatively, you could simply [use GitHub Pages to host your application persistently](https://sbcode.net/threejs/github-pages/).
+## Licence
 
-### Tunneling alternatives
-
-Check these tunneling alternatives such as `ngrok` or `zrok` for simple personal projects, use [tunneling solutions](https://github.com/anderspitman/awesome-tunneling)
-
-### Manual HTTPS setup
-
-In order to use `https`, copy your certificates to the `.cert` folder, and change the `serve` command to:
-
-`"serve": "http-server dist -S -C .cert/cert.pem -K .cert/key.pem`
-
-## Deploying the App with GitHub Pages
-
-(original: https://github.com/meta-quest/webxr-first-steps?tab=readme-ov-file#build-and-deploy)
-
-This repository includes a ready-to-use GitHub Actions workflow located at `.github/workflows/deploy.yml`, which automates both the build and deployment to GitHub Pages. Once enabled, every time you push changes to the `main` branch, a new build will automatically be deployed.
-
-#### Steps to Enable GitHub Pages Deployment:
-
-0. **IMPORTANT: Set the `base` variable** in `vite.config.js` (default name `/three_vite_xr`) to the actual name of your repository. Your app will be deployed to https://[GITUSERNAME].github.io/[REPOSITORY_NAME] (for example https://fdoganis.github.io/three_vite_xr)
-1. **Fork this repository** to your own GitHub account.
-2. Navigate to your forked repository’s **Settings**.
-3. Scroll down to the **Pages** section.
-4. Under **Build and Deployment**, change the **Source** to **GitHub Actions**.
-
-Once this is set, GitHub Actions will handle the build and deployment process automatically. Any time you push changes to the `main` branch, the app will be built and deployed to GitHub Pages without any additional manual steps.
-
-You can monitor the status of the deployment job or manually re-run it via the **Actions** tab in your GitHub repository.
-
-### Deploying to Your Own Hosting Solution
-
-If you prefer to host the app yourself, you’ll need to manually build the app and then deploy the generated files to your hosting provider.
-
-To generate the build, run the following command:
-
-```bash
-npm run build
-```
-
-This will create a `dist` folder containing the static files for the app. You can then upload these files to your hosting platform of choice.
-
-# Credits
-
-- XR enhanced version of the original `three_vite` template : https://github.com/fdoganis/three_vite (MIT License)
-- THREE.js WebXR code inspired by https://threejs.org/examples/webxr_ar_cones.html (MIT License)
-
-- Test model (red cube) from https://github.com/cx20/gltf-test/tree/master/sampleModels/Box (CC BY License)
-
-- Some very interesting features (emulator, github pages deployment) have been borrowed from https://github.com/meta-quest/webxr-first-steps (MIT License)
-  - Make sure to check this excellent tutorial out! Even if it is mostly focused on VR, it is a great introduction on how to combine WebXR with THREE.js.
-  - See [Deployment Instructions](https://github.com/meta-quest/webxr-first-steps?tab=readme-ov-file#build-and-deploy)
+MIT — voir [LICENSE](./LICENSE)

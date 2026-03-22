@@ -18,7 +18,7 @@ export class ARCat {
   hasTarget(): boolean { return this.target !== null }
 
 updateTarget(pos: THREE.Vector3) {
-  if (this.target) this.target.copy(pos)  // met à jour sans reset la bubble
+  if (this.target) this.target.copy(pos) 
 }
 
   private buildMesh(): void {
@@ -100,23 +100,20 @@ updateTarget(pos: THREE.Vector3) {
   update(dt: number): boolean {
     this.animTime += dt
 
-    // Animation
     this.tailMesh.rotation.y = Math.sin(this.animTime * 10) * 0.5
     this.bodyMesh.position.y = Math.sin(this.animTime * 8) * 0.015
     this.headMesh.position.y = 0.04 + Math.sin(this.animTime * 8) * 0.01
 
     if (!this.target) return false
 
-    // Déplacement vers la cible
     const dir = new THREE.Vector3().subVectors(this.target, this.mesh.position)
     dir.y = 0
     const dist = dir.length()
 
     if (dist < 0.4  ) {
-      // Arrivé à l'ingrédient
       this.target = null
       this.showSpeechBubble('😸 NOM NOM !')
-      return true // ingrédient volé
+      return true 
     }
 
     dir.normalize()

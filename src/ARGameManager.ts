@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { ARCat } from './ARCat'
 import { Ingredient, INGREDIENTS_DATA } from './entities/Ingredient'
+import * as CANNON from 'cannon-es'
 
 type GameMode = 'menu' | 'cacher' | 'trouver'
 
@@ -28,23 +29,30 @@ export class ARGameManager {
   private catSpawnTimer = 0
   private readonly CAT_SPAWN_DELAY = 5
 
-  // Gaze
+  
   private gazeTarget: ARIngredient | null = null
   private gazeTimer = 0
   private readonly GAZE_DURATION = 2.0
   private gazeRing!: THREE.Mesh
 
-  constructor(scene: THREE.Scene, camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer) {
-    this.scene = scene
-    this.camera = camera
-    this.renderer = renderer
-    this.createUI()
-    this.createGazeRing()
-  }
+
+  private physicsWorld!: CANNON.World
+  private physicsBodies: Map<ARIngredient, CANNON.Body> = new Map()
+  private floorBody: CANNON.Body | null = null
+
+constructor(scene: THREE.Scene, camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer) {
+  this.scene = scene
+  this.camera = camera
+  this.renderer = renderer
+  this.createUI()
+  this.createGazeRing()
+
+  this.physicsWorld = new CANNON.World({ gravity: new CANNON.Vec3(0, -4, 0) })
+  this.physicsWorld.broadphase = new CANNON.NaiveBroadphase()
+}
 
   isPlacing() { return this.mode === 'cacher' }
 
-  // ─── Audio ────────────────────────────────────────────────────────────────
 
   private unlockAudio() {
     if (this.audioCtx) return
@@ -116,7 +124,6 @@ export class ARGameManager {
     if ('vibrate' in navigator) navigator.vibrate(pattern)
   }
 
-  // ─── Gaze ─────────────────────────────────────────────────────────────────
 
   private createGazeRing() {
     const geo = new THREE.RingGeometry(0.004, 0.006, 32)
@@ -128,50 +135,36 @@ export class ARGameManager {
     this.camera.add(this.gazeRing)
   }
 
-  private updateGaze(dt: number) {
-    if (this.mode !== 'trouver') return
+private updateGaze(dt: number) {
+  if (this.mode !== 'trouver') return
 
-    const raycaster = new THREE.Raycaster()
-    raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera)
+  const raycaster = new THREE.Raycaster()
+  raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera)
 
-    const visibleMeshes = this.ingredients
-      .filter(i => !i.collected && i.mesh.visible)
-      .map(i => i.mesh)
+  const visibleMeshes = this.ingredients
+    .filter(i => !i.collected && i.mesh.visible)
+    .map(i => i.mesh)
 
-    const hits = raycaster.intersectObjects(visibleMeshes, true)
+  const hits = raycaster.intersectObjects(visibleMeshes, true)
 
-    if (hits.length > 0) {
-      const hitMesh = hits[0].object
-      const ing = this.ingredients.find(
-        i => i.mesh === hitMesh || i.mesh.children.includes(hitMesh as THREE.Object3D)
-      )
-      if (ing) {
-        if (this.gazeTarget === ing) {
-          this.gazeTimer += dt
-          const progress = this.gazeTimer / this.GAZE_DURATION
-          ;(this.gazeRing.material as THREE.MeshBasicMaterial).color.setHSL(0.33 - progress * 0.33, 1, 0.6)
-          this.gazeRing.scale.setScalar(1 + progress * 2)
-
-          if (this.gazeTimer >= this.GAZE_DURATION) {
-            this.collect(ing)
-            this.gazeTimer = 0
-            this.gazeTarget = null
-          }
-        } else {
-          this.gazeTarget = ing
-          this.gazeTimer = 0
-        }
-        return
-      }
+  if (hits.length > 0) {
+    const hitMesh = hits[0].object
+    const ing = this.ingredients.find(
+      i => i.mesh === hitMesh || i.mesh.children.includes(hitMesh as THREE.Object3D)
+    )
+    if (ing && this.gazeTarget !== ing) {
+      this.gazeTarget = ing
+      this.gazeTimer = 0
     }
-
+  } else {
     this.gazeTarget = null
     this.gazeTimer = 0
-    ;(this.gazeRing.material as THREE.MeshBasicMaterial).color.set(0xffffff)
-    this.gazeRing.scale.setScalar(1)
   }
 
-  // ─── Game logic ───────────────────────────────────────────────────────────
+  ;(this.gazeRing.material as THREE.MeshBasicMaterial).color.set(0xffffff)
+  this.gazeRing.scale.setScalar(1)
+}
+
 
   onTap(position: THREE.Vector3) {
     this.unlockAudio()
@@ -205,89 +198,99 @@ export class ARGameManager {
     }
   }
 
-  update(timestamp: number) {
-    if (this.mode !== 'trouver') return
+update(timestamp: number) {
+  if (this.mode !== 'trouver') {
+    if (this.mode === 'cacher') {
+      const dt = (timestamp - this.lastTime) / 1000
+      this.lastTime = timestamp
+      this.physicsWorld.step(1 / 60, Math.min(dt, 0.1), 3)
+      this.syncPhysics()
+    } else {
+      this.lastTime = timestamp
+    }
+    return
+  }
 
-    const dt = (timestamp - this.lastTime) / 1000
-    this.lastTime = timestamp
-    this.timeLeft -= dt
+  const dt = (timestamp - this.lastTime) / 1000
+  this.lastTime = timestamp
+  this.timeLeft -= dt
 
-    const timerEl = document.getElementById('ar-timer')
-    if (timerEl) {
-      const t = Math.ceil(this.timeLeft)
-      timerEl.textContent = `⏱ ${t}s`
-      timerEl.style.color = t <= 10 ? '#e74c3c' : '#f39c12'
+  const timerEl = document.getElementById('ar-timer')
+  if (timerEl) {
+    const t = Math.ceil(this.timeLeft)
+    timerEl.textContent = `⏱ ${t}s`
+    timerEl.style.color = t <= 10 ? '#e74c3c' : '#f39c12'
+  }
+
+  if (this.timeLeft <= 0) {
+    this.endGame()
+    return
+  }
+
+  this.physicsWorld.step(1 / 60, Math.min(dt, 0.1), 3)
+  this.syncPhysics()
+
+  this.updateGaze(dt)
+
+  this.catSpawnTimer -= dt
+  if (this.catSpawnTimer <= 0 && !this.cat && this.ingredients.some(i => !i.collected)) {
+    this.spawnCat()
+  }
+
+  if (this.cat) {
+    const currentTarget = this.ingredients.find(i => !i.collected)
+    if (currentTarget) {
+      if (!this.cat.hasTarget()) {
+        this.cat.setTarget(currentTarget.mesh.position)
+      } else {
+        this.cat.updateTarget(currentTarget.mesh.position)
+      }
     }
 
-    if (this.timeLeft <= 0) {
-      this.endGame()
-      return
-    }
+    const stole = this.cat.update(dt)
+    if (stole) {
+      const target = this.ingredients.find(i => !i.collected)
+      if (target) {
+        this.showMessage('😾 Le chat a volé un ingrédient !')
+        this.vibrate(300)
+        this.playSound(200, 0.4, 'fail')
+        target.collected = true
+        this.scene.remove(target.mesh)
 
-    // Gaze
-    this.updateGaze(dt)
+        const el = document.getElementById('ar-score')
+        if (el) el.textContent = `🧀 ${this.score} / ${this.ingredients.length}`
 
-    // Chat
-    this.catSpawnTimer -= dt
-    if (this.catSpawnTimer <= 0 && !this.cat && this.ingredients.some(i => !i.collected)) {
-      this.spawnCat()
-    }
-
-    if (this.cat) {
-      const currentTarget = this.ingredients.find(i => !i.collected)
-      if (currentTarget) {
-        if (!this.cat.hasTarget()) {
-          this.cat.setTarget(currentTarget.mesh.position)
+        const next = this.ingredients.find(i => !i.collected)
+        if (next) {
+          this.cat.setTarget(next.mesh.position)
         } else {
-          this.cat.updateTarget(currentTarget.mesh.position)
+          this.scene.remove(this.cat.mesh)
+          this.cat = null
         }
-      }
 
-      const stole = this.cat.update(dt)
-      if (stole) {
-        const target = this.ingredients.find(i => !i.collected)
-        if (target) {
-          this.showMessage('😾 Le chat a volé un ingrédient !')
-          this.vibrate(300)
-          this.playSound(200, 0.4, 'fail')
-          target.collected = true
-          this.scene.remove(target.mesh)
-
-          const el = document.getElementById('ar-score')
-          if (el) el.textContent = `🧀 ${this.score} / ${this.ingredients.length}`
-
-          const next = this.ingredients.find(i => !i.collected)
-          if (next) {
-            this.cat.setTarget(next.mesh.position)
-          } else {
-            this.scene.remove(this.cat.mesh)
-            this.cat = null
-          }
-
-          if (this.ingredients.filter(i => !i.collected).length === 0) {
-            setTimeout(() => this.endGame(), 1500)
-          }
+        if (this.ingredients.filter(i => !i.collected).length === 0) {
+          setTimeout(() => this.endGame(), 1500)
         }
-      }
-    }
-
-    // Ingrédients
-    const camPos = this.camera.position
-    for (const ing of this.ingredients) {
-      if (ing.collected) continue
-      ing.ingredient.update(dt)
-
-      const dist = camPos.distanceTo(ing.mesh.position)
-      if (dist < 1.5 && !ing.mesh.visible) {
-        ing.mesh.visible = true
-        this.showMessage('👀 Ingrédient nearby !')
-        this.playSound(270, 0.2, 'discover')
-        this.vibrate(40)
-      } else if (dist >= 1.5 && ing.mesh.visible) {
-        ing.mesh.visible = false
       }
     }
   }
+
+  const camPos = this.camera.position
+  for (const ing of this.ingredients) {
+    if (ing.collected) continue
+    ing.ingredient.update(dt)
+
+    const dist = camPos.distanceTo(ing.mesh.position)
+    if (dist < 1.5 && !ing.mesh.visible) {
+      ing.mesh.visible = true
+      this.showMessage('👀 Ingrédient nearby !')
+      this.playSound(270, 0.2, 'discover')
+      this.vibrate(40)
+    } else if (dist >= 1.5 && ing.mesh.visible) {
+      ing.mesh.visible = false
+    }
+  }
+}
 
   private spawnCat() {
     this.cat = new ARCat()
@@ -309,34 +312,75 @@ export class ARGameManager {
     this.catSpawnTimer = this.CAT_SPAWN_DELAY + 10
   }
 
-  private spawnIngredient(position: THREE.Vector3) {
-    if (this.ingredients.length >= 5) {
-      this.showMessage('Maximum 5 ingrédients !')
-      return
+  private syncPhysics() {
+  const floorY = this.floorBody?.position.y ?? 0
+
+  for (const [ing, body] of this.physicsBodies) {
+    if (ing.collected) continue
+    if (body.mass === 0) continue 
+
+    ing.mesh.position.set(body.position.x, body.position.y, body.position.z)
+
+    if (body.position.y <= floorY + 0.1 && body.velocity.length() < 0.08) {
+      body.mass = 0
+      body.updateMassProperties()
+      body.velocity.set(0, 0, 0)
+      ing.ingredient.data.position.copy(ing.mesh.position)
     }
+  }
+}
 
-    const usedNames = this.ingredients.map(i => i.name)
-    const available = INGREDIENTS_DATA.filter(d => !usedNames.includes(d.name))
-    if (available.length === 0) return
-
-    const data = available[Math.floor(Math.random() * available.length)]
-    const ing = new Ingredient({ ...data, position: position.clone() })
-
-    this.scene.add(ing.mesh)
-    this.ingredients.push({
-      ingredient: ing,
-      mesh: ing.mesh,
-      name: data.name,
-      collected: false
-    })
-
-    this.vibrate(40)
-
-    const remaining = 5 - this.ingredients.length
-    const el = document.getElementById('ar-count')
-    if (el) el.textContent = `${this.ingredients.length}/5 caché${this.ingredients.length > 1 ? 's' : ''}${remaining > 0 ? ` — encore ${remaining}` : ' ✅'}`
+private spawnIngredient(position: THREE.Vector3) {
+  if (this.ingredients.length >= 5) {
+    this.showMessage('Maximum 5 ingrédients !')
+    return
   }
 
+  const usedNames = this.ingredients.map(i => i.name)
+  const available = INGREDIENTS_DATA.filter(d => !usedNames.includes(d.name))
+  if (available.length === 0) return
+
+  const data = available[Math.floor(Math.random() * available.length)]
+  const spawnPos = position.clone()
+  spawnPos.y += 0.5 
+
+  const ing = new Ingredient({ ...data, position: spawnPos.clone() })
+  ing.mesh.position.copy(spawnPos)
+  this.scene.add(ing.mesh)
+
+  const body = new CANNON.Body({
+    mass: 1,
+    shape: new CANNON.Sphere(0.05),
+    position: new CANNON.Vec3(spawnPos.x, spawnPos.y, spawnPos.z),
+    linearDamping: 0.3,
+    angularDamping: 0.6,
+  })
+  body.material = new CANNON.Material({ restitution: 0.6 })
+  this.physicsWorld.addBody(body)
+
+  if (!this.floorBody) {
+    const floorMat = new CANNON.Material({ restitution: 0.6 })
+    this.floorBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane(), material: floorMat })
+    this.floorBody.position.set(position.x, position.y, position.z)
+    this.floorBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0)
+    this.physicsWorld.addBody(this.floorBody)
+  }
+
+  const arIng: ARIngredient = {
+    ingredient: ing,
+    mesh: ing.mesh,
+    name: data.name,
+    collected: false
+  }
+  this.physicsBodies.set(arIng, body)
+  this.ingredients.push(arIng)
+
+  this.vibrate(40)
+
+  const remaining = 5 - this.ingredients.length
+  const el = document.getElementById('ar-count')
+  if (el) el.textContent = `${this.ingredients.length}/5 caché${this.ingredients.length > 1 ? 's' : ''}${remaining > 0 ? ` — encore ${remaining}` : ' ✅'}`
+}
   private finishCacher() {
     for (const ing of this.ingredients) ing.mesh.visible = false
     this.showOverlay(`
@@ -349,38 +393,53 @@ export class ARGameManager {
     document.getElementById('btn-start-find')?.addEventListener('click', () => this.startTrouver())
   }
 
-  private startTrouver() {
-    this.mode = 'trouver'
-    this.score = 0
-    this.timeLeft = 60
-    this.lastTime = performance.now()
-    this.catSpawnTimer = this.CAT_SPAWN_DELAY
+private startTrouver() {
+  this.mode = 'trouver'
+  this.score = 0
+  this.timeLeft = 60
+  this.lastTime = performance.now()
+  this.catSpawnTimer = this.CAT_SPAWN_DELAY
 
-    this.showOverlay(`
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:0.75rem 1rem;">
-        <span id="ar-score" style="font-size:1.1rem;font-weight:bold;">🧀 0 / ${this.ingredients.length}</span>
-        <span id="ar-timer" style="font-size:1.1rem;font-weight:bold;color:#f39c12;">⏱ 60s</span>
-      </div>
-    `)
+  this.showOverlay(`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:0.75rem 1rem;">
+      <span id="ar-score" style="font-size:1.1rem;font-weight:bold;">🧀 0 / ${this.ingredients.length}</span>
+      <span id="ar-timer" style="font-size:1.1rem;font-weight:bold;color:#f39c12;">⏱ 60s</span>
+    </div>
+  `)
 
-    const raycaster = new THREE.Raycaster()
-    this.renderer.domElement.addEventListener('touchend', (e) => {
-      if (this.mode !== 'trouver') return
-      const touch = e.changedTouches[0]
-      const x = (touch.clientX / window.innerWidth) * 2 - 1
-      const y = -(touch.clientY / window.innerHeight) * 2 + 1
-      raycaster.setFromCamera(new THREE.Vector2(x, y), this.camera)
-      const meshes = this.ingredients.filter(i => !i.collected && i.mesh.visible).map(i => i.mesh)
-      const hits = raycaster.intersectObjects(meshes, true)
-      if (hits.length > 0) {
-        const hitMesh = hits[0].object
-        const ing = this.ingredients.find(
-          i => i.mesh === hitMesh || i.mesh.children.includes(hitMesh as THREE.Object3D)
-        )
-        if (ing) this.collect(ing)
-      }
-    }, { passive: false })
-  }
+  const raycaster = new THREE.Raycaster()
+  raycaster.far = 5
+
+  this.renderer.domElement.addEventListener('touchend', (e) => {
+    if (this.mode !== 'trouver') return
+    e.stopPropagation()
+
+    const touch = e.changedTouches[0]
+    const x = (touch.clientX / window.innerWidth) * 2 - 1
+    const y = -(touch.clientY / window.innerHeight) * 2 + 1
+    raycaster.setFromCamera(new THREE.Vector2(x, y), this.camera)
+
+    const visibleIngredients = this.ingredients.filter(i => !i.collected && i.mesh.visible)
+    const meshes = visibleIngredients.map(i => i.mesh)
+
+    const hits = raycaster.intersectObjects(meshes, true)
+      .filter(h => !(h.object instanceof THREE.Points)) 
+      .sort((a, b) => a.distance - b.distance)        
+
+    if (hits.length > 0) {
+      const hitObj = hits[0].object
+      const ing = visibleIngredients.find(i => {
+        let obj: THREE.Object3D | null = hitObj
+        while (obj) {
+          if (obj === i.mesh) return true
+          obj = obj.parent
+        }
+        return false
+      })
+      if (ing) this.collect(ing)
+    }
+  }, { passive: false })
+}
 
   private collect(ing: ARIngredient) {
     ing.collected = true
@@ -443,7 +502,6 @@ export class ARGameManager {
     document.getElementById('btn-replay')?.addEventListener('click', () => window.location.reload())
   }
 
-  // ─── UI ───────────────────────────────────────────────────────────────────
 
   private createUI() {
     this.overlayEl = document.createElement('div')
