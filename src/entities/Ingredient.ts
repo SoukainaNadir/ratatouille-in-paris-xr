@@ -16,6 +16,8 @@ export class Ingredient {
   private floatTime = Math.random() * Math.PI * 2
   private label!: THREE.Sprite
   private glowRing!: THREE.Mesh
+  private shadowMesh!: THREE.Mesh
+  private bodyMesh!: THREE.Mesh
 
   constructor(data: IngredientData) {
     this.data = data
@@ -26,16 +28,29 @@ export class Ingredient {
   }
 
   private buildMesh(): void {
-    const geo = new THREE.DodecahedronGeometry(0.3, 0)
+    const geo = new THREE.DodecahedronGeometry(0.05, 0)
     const mat = new THREE.MeshToonMaterial({
       color: this.data.color,
       emissive: this.data.color,
-      emissiveIntensity: 0.3
+      emissiveIntensity: 0.4
     })
-    const sphere = new THREE.Mesh(geo, mat)
-    sphere.castShadow = true
+    this.bodyMesh = new THREE.Mesh(geo, mat)
+    this.bodyMesh.castShadow = true
 
-    const ringGeo = new THREE.TorusGeometry(0.45, 0.03, 8, 32)
+    // Ombre au sol
+    const shadowGeo = new THREE.CircleGeometry(0.045, 16)
+    const shadowMat = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      transparent: true,
+      opacity: 0.3,
+      depthWrite: false
+    })
+    this.shadowMesh = new THREE.Mesh(shadowGeo, shadowMat)
+    this.shadowMesh.rotation.x = -Math.PI / 2
+    this.shadowMesh.position.y = -0.08
+
+    // Glow ring
+    const ringGeo = new THREE.TorusGeometry(0.075, 0.006, 8, 32)
     const ringMat = new THREE.MeshBasicMaterial({
       color: this.data.color,
       transparent: true,
@@ -44,31 +59,30 @@ export class Ingredient {
     this.glowRing = new THREE.Mesh(ringGeo, ringMat)
     this.glowRing.rotation.x = Math.PI / 2
 
+    // Emoji label
     const canvas = document.createElement('canvas')
-    canvas.width = 128
-    canvas.height = 128
+    canvas.width = 128; canvas.height = 128
     const ctx = canvas.getContext('2d')!
     ctx.font = '80px serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillText(this.data.emoji, 64, 64)
     const texture = new THREE.CanvasTexture(canvas)
-    const spriteMat = new THREE.SpriteMaterial({ map: texture })
-    this.label = new THREE.Sprite(spriteMat)
-    this.label.position.set(0, 0.8, 0)
-    this.label.scale.set(0.8, 0.8, 1)
+    this.label = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture }))
+    this.label.position.set(0, 0.12, 0)
+    this.label.scale.set(0.14, 0.14, 1)
 
-    this.mesh.add(sphere, this.glowRing, this.label, this.particles)
+    this.mesh.add(this.bodyMesh, this.shadowMesh, this.glowRing, this.label, this.particles)
   }
 
   private createParticles(): THREE.Points {
-    const count = 20
+    const count = 12
     const positions = new Float32Array(count * 3)
     for (let i = 0; i < count; i++) {
       const theta = Math.random() * Math.PI * 2
       const phi = Math.random() * Math.PI
-      const r = 0.5 + Math.random() * 0.3
-      positions[i * 3] = r * Math.sin(phi) * Math.cos(theta)
+      const r = 0.08 + Math.random() * 0.04
+      positions[i * 3]     = r * Math.sin(phi) * Math.cos(theta)
       positions[i * 3 + 1] = r * Math.cos(phi)
       positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta)
     }
@@ -76,9 +90,9 @@ export class Ingredient {
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3))
     const mat = new THREE.PointsMaterial({
       color: this.data.color,
-      size: 0.08,
+      size: 0.018,
       transparent: true,
-      opacity: 0.7,
+      opacity: 0.8,
       sizeAttenuation: true
     })
     return new THREE.Points(geo, mat)
@@ -88,17 +102,30 @@ export class Ingredient {
     if (this.collected) return
     this.floatTime += dt
 
-    this.mesh.position.y = this.data.position.y + 0.5 + Math.sin(this.floatTime * 1.5) * 0.2
+    // Flottement vertical
+    const floatY = Math.sin(this.floatTime * 2.5) * 0.03
+    this.mesh.position.y = this.data.position.y + 0.1 + floatY
 
-    this.mesh.rotation.y += dt * 1.2
+    // Ombre dynamique
+    const height = 0.1 + floatY
+    const shadowScale = Math.max(0.4, 1 - height * 3)
+    this.shadowMesh.scale.setScalar(shadowScale)
+    ;(this.shadowMesh.material as THREE.MeshBasicMaterial).opacity = 0.1 + shadowScale * 0.25
+    this.shadowMesh.position.y = -height
 
-    const scale = 1 + Math.sin(this.floatTime * 3) * 0.15
-    this.glowRing.scale.set(scale, scale, scale)
+    // Rotation corps
+    this.bodyMesh.rotation.y += dt * 2.0
+    this.bodyMesh.rotation.x = Math.sin(this.floatTime * 1.5) * 0.3
+
+    // Glow ring pulse
+    const pulse = 1 + Math.sin(this.floatTime * 4) * 0.25
+    this.glowRing.scale.set(pulse, pulse, pulse)
     ;(this.glowRing.material as THREE.MeshBasicMaterial).opacity =
-      0.4 + Math.sin(this.floatTime * 3) * 0.3
+      0.3 + Math.sin(this.floatTime * 4) * 0.3
 
-    this.particles.rotation.y += dt * 0.5
-    this.particles.rotation.x += dt * 0.3
+    // Particules
+    this.particles.rotation.y += dt * 0.8
+    this.particles.rotation.x += dt * 0.5
   }
 
   collect(): void {
@@ -111,8 +138,9 @@ export class Ingredient {
   }
 
   getCollectionRadius(): number {
-    return 1.2
+    return 0.3
   }
+
   resetIngredient(): void {
     this.collected = false
     this.mesh.visible = true
@@ -121,9 +149,9 @@ export class Ingredient {
 }
 
 export const INGREDIENTS_DATA: Omit<IngredientData, 'position'>[] = [
-  { emoji: '🧀', name: 'Fromage de Paris', color: 0xFFD700 },
-  { emoji: '🍅', name: 'Tomate Bio',        color: 0xFF4444 },
-  { emoji: '🧈', name: 'Beurre Normand',    color: 0xFFF176 },
-  { emoji: '🌿', name: 'Herbes de Provence',color: 0x44CC44 },
-  { emoji: '🍄', name: 'Truffe Noire',      color: 0x8B4513 }
+  { emoji: '🧀', name: 'Fromage de Paris',   color: 0xFFD700 },
+  { emoji: '🍅', name: 'Tomate Bio',          color: 0xFF4444 },
+  { emoji: '🧈', name: 'Beurre Normand',      color: 0xFFF176 },
+  { emoji: '🌿', name: 'Herbes de Provence',  color: 0x44CC44 },
+  { emoji: '🍄', name: 'Truffe Noire',        color: 0x8B4513 }
 ]
