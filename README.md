@@ -39,7 +39,7 @@ sur le sol réel, puis flottent et brillent pour indiquer leur présence.
 
 ## Démo
 
-![Demo](demo.gif)
+<img src="demo.gif" width="300"/>
 
 ---
 
